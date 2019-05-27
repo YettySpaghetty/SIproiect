@@ -1,0 +1,269 @@
+#include <hidef.h>      /* common defines and macros */
+#include "mc9s12dg256.h"      /* derivative-specific definitions */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#pragma LINK_INFO DERIVATIVE "mc9s12dg256b"
+
+void MSDelay(unsigned int itime){
+  unsigned int i; unsigned int j;
+  for(i=0;i<itime;i++)
+    for(j=0;j<4000;j++); //1 msec. tested using Scope
+}
+int turn;
+char matrix[3][3]; 
+
+unsigned char column, row, myRow; //to read the keypad
+
+char check(void);
+void init_matrix(void);
+void get_player_move(void);
+void get_computer_move(void);
+void disp_matrix(void);
+void printing_serial(char *p);
+void printing_char(char p) ;
+void readKeypad(void);
+
+void main(void) {     
+  int state = 0;
+  char *ptr = &matrix[0][0];              
+  char done;
+  int turn = 1;
+                 
+  char *stringPlayer = "Your move.\r\n";
+ 
+  SCI0BDH = 0x00;
+  SCI0BDL = 26;
+  SCI0CR1 = 0x00;
+  SCI0CR2 = 0x0C;
+
+  DDRA = 0x0F;                           //set as output 
+
+  for(;;){
+  
+    if (state == 0){
+      init_matrix();
+      disp_matrix();     
+      state = 1;
+    }
+    
+    if (state == 1){
+      printing_serial(stringPlayer);
+      do {
+        disp_matrix();
+        get_player_move();
+        turn++;
+        done = check(); /* check winner */
+        if(done != ' ') 
+          break; /* winner!*/
+        get_computer_move();
+        disp_matrix();
+        turn++;
+        done = check(); /* check winner */
+      } while(done == ' ');
+      
+      state = 2;
+    }
+      
+      if (state == 2){
+        if(done == 'X')
+          printing_serial("You won!\r\n");
+        else
+          printing_serial("Computer won!!!!\r\n");
+
+        disp_matrix(); /* show final positions */ 
+        break;
+      }
+  }
+      
+}
+
+
+void disp_matrix(void){
+  int t;
+  for(t=0; t<3; t++) {
+    printing_serial(" ");
+    printing_char(matrix[t][0]);
+    printing_serial(" | ");
+    printing_char(matrix[t][1]);
+    printing_serial(" | ");
+    printing_char(matrix[t][2]);
+    if(t!=2){
+      printing_serial("\r\n---|---|---\r\n");
+    }
+  } 
+  printing_serial("\r\n");
+}   
+
+
+const unsigned char keypad[4][4] =
+{
+'1','2','3','A',
+'4','5','6','B',
+'7','8','9','C',
+'*','0','#','D'
+};
+
+void readKeypad(){
+    do{                            
+         PORTA = PORTA | 0x0F;            //COLUMNS SET HIGH
+         row = PORTA & 0xF0;              //READ ROWS
+      }while(row == 0x00);                //WAIT UNTIL KEY PRESSED
+    
+      do{                       
+         do{                         
+            MSDelay(1);        
+            row = PORTA & 0xF0;           //READ ROWS
+         }while(row == 0x00);             //CHECK FOR KEY PRESS
+         
+         MSDelay(15);                     //WAIT FOR DEBOUNCE
+         row = PORTA & 0xF0;
+      }while(row == 0x00);                //FALSE KEY PRESS
+
+      while(1){                         
+         PORTA &= 0xF0;                   //CLEAR COLUMN
+         PORTA |= 0x01;                   //COLUMN 0 SET HIGH
+         row = PORTA & 0xF0;              //READ ROWS
+         if(row != 0x00){                 //KEY IS IN COLUMN 0
+            column = 0;
+            break;                        
+         }
+         PORTA &= 0xF0;                   //CLEAR COLUMN
+         PORTA |= 0x02;                   //COLUMN 1 SET HIGH
+         row = PORTA & 0xF0;              //READ ROWS
+         if(row != 0x00){                 //KEY IS IN COLUMN 1
+            column = 1;
+            break;                        
+         }
+
+         PORTA &= 0xF0;                   //CLEAR COLUMN
+         PORTA |= 0x04;                   //COLUMN 2 SET HIGH
+         row = PORTA & 0xF0;              //READ ROWS
+         if(row != 0x00){                 //KEY IS IN COLUMN 2
+            column = 2;
+            break;                        
+         }
+         PORTA &= 0xF0;                   //CLEAR COLUMN
+         PORTA |= 0x08;                   //COLUMN 3 SET HIGH
+         row = PORTA & 0xF0;              //READ ROWS
+         if(row != 0x00){                 //KEY IS IN COLUMN 3
+            column = 3;
+            break;                        
+         }                        //KEY NOT FOUND                              
+      } 
+      
+      if(row == 0x10){
+         myRow=0; 
+ 
+      }
+      else if(row == 0x20){
+         myRow=1;
+ 
+      }
+      else if(row == 0x40){
+         myRow=2;
+ 
+      }
+      else if(row == 0x80){
+         myRow=3;
+ 
+      }
+      
+      do{
+         MSDelay(15);
+         PORTA = PORTA | 0x0F;            //COLUMNS SET HIGH
+         row = PORTA & 0xF0;              //READ ROWS
+      }while(row != 0x00);                //MAKE SURE BUTTON IS NOT STILL HELD
+      
+}
+
+
+void get_player_move(void){
+  int x, y;
+  printing_serial("Press keypad to select your move: \r\n");
+  readKeypad();
+  printing_serial("\r\n");
+  
+  x = myRow;
+  y = column;
+  
+  if(matrix[x][y] != ' '){
+    printing_serial("Invalid move, try again.\r\n");
+    get_player_move();
+  }else{
+    matrix[x][y] = 'X';
+  }
+}
+
+
+void get_computer_move(void){
+  int i, j;
+  for(i=0; i<3; i++){
+    for(j=0; j<3; j++)
+      if(matrix[i][j] == ' ') break;
+      if(matrix[i][j] == ' ') break;
+  }
+
+  if(i*j==9) {
+    printing_serial("Draw!\r\n");
+  }else
+    matrix[i][j]='O';
+}  
+	
+void printing_serial(char *p){
+   int i = 0;
+   char str[200];
+   strcpy(str, p); 
+   while (str[i] != ''){
+     if (SCI0SR1 & 0x80){
+       SCI0DRL = str[i++];   
+     }
+   }
+   return;
+}  
+
+void printing_char(char p){
+  int i = 0;
+  while (i < 1){
+     if (SCI0SR1 & 0x80){
+       SCI0DRL = p;  
+i++;
+     }
+   }
+   return;
+}  
+
+
+char reading_serial(){
+ 
+   while (!(SCI0SR1 & 0x20)); 
+   return SCI0DRL;   
+     
+} 
+
+void init_matrix(){
+  int i, j;
+  for(i=0; i< 3; i++) {   
+    for(j=0; j< 3; j++){
+      matrix[i][j] = ' ';
+    }
+  printing_serial("\r\n");
+  }
+  return;
+}
+
+char check(void){
+  int i;
+  for(i=0; i<3; i++)
+    if(matrix[i][0]==matrix[i][1] && matrix[i][0]==matrix[i][2] )
+      return matrix[i][0];
+  for(i=0; i<3; i++)
+    if(matrix[0][i]==matrix[1][i] && matrix[0][i]==matrix[2][i])
+      return matrix[0][i];
+
+  if(matrix[0][0]==matrix[1][1] && matrix[1][1]==matrix[2][2])
+    return matrix[0][0];
+  if(matrix[0][2]==matrix[1][1] && matrix[1][1]==matrix[2][0])
+    return matrix[0][2];
+  return ' ';
+}
